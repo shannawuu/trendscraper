@@ -2,3 +2,11 @@ __pycache__/
 *.pyc
 .DS_Store
 .claude/
+
+# NEVER commit TikTok session cookies — they are a live login to your account
+cookies.json
+cookies.txt
+scraper/cookies.json
+scraper/cookies.txt
+*.cookies
+secrets.json

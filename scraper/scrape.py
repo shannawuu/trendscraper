@@ -9,14 +9,22 @@ aggregates them into trend data for the dashboard:
   - trending hashtags per niche (computed) + official Creative Center hashtags
   - estimated best posting hours per niche (engagement-weighted histogram)
 
+With a TikTok session (see load_cookies), it additionally reads the full,
+login-walled video grid under each niche's `gridTags` — hundreds of real
+videos per niche instead of the handful visible in the logged-out Explore
+sample. Runs degrade gracefully to logged-out mode when no valid session is
+present.
+
 Outputs:
   data/latest.json            full dashboard payload
   data/history/YYYY-MM-DD.json  compact daily snapshot used for momentum
+  data/pool.json              rolling explore-matched videos for niches
 """
 
 import asyncio
 import json
 import math
+import os
 import re
 import sys
 from collections import defaultdict
@@ -44,6 +52,87 @@ def load_config():
 
 def log(*args):
     print("[scrape]", *args, flush=True)
+
+
+# --------------------------------------------------------------------------
+# Optional TikTok login session
+# --------------------------------------------------------------------------
+# When a valid session is available, the scraper can read login-walled data:
+# the full video grid under each hashtag (200+ real videos) rather than only
+# the handful that surface in the logged-out Explore sample. Everything
+# degrades gracefully to logged-out mode when no cookies are present or the
+# session has expired.
+#
+# Cookies come from either:
+#   - env var TIKTOK_COOKIES: a JSON object {name: value} (used in CI, stored
+#     as an encrypted GitHub Actions secret), or
+#   - scraper/cookies.json: the same JSON, for local runs (gitignored).
+# A session cookie is a live login — never commit it.
+
+COOKIES = []  # list of Playwright cookie dicts; empty => logged-out mode
+
+
+def load_cookies():
+    raw = os.environ.get("TIKTOK_COOKIES")
+    source = "env TIKTOK_COOKIES"
+    if not raw:
+        path = Path(__file__).resolve().parent / "cookies.json"
+        if path.exists():
+            raw = path.read_text()
+            source = str(path)
+    if not raw:
+        log("no session cookies found — running in logged-out mode")
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception as e:
+        log(f"WARNING: could not parse cookies from {source}: {e} — logged-out mode")
+        return []
+    cookies = []
+    for name, value in data.items():
+        domain = "www.tiktok.com" if name in ("last_login_method",) else ".tiktok.com"
+        cookies.append({"name": name, "value": str(value), "domain": domain,
+                        "path": "/", "secure": True})
+    if not any(c["name"] == "sessionid" for c in cookies):
+        log(f"WARNING: cookies from {source} have no 'sessionid' — logged-out mode")
+        return []
+    log(f"loaded {len(cookies)} session cookies from {source} — logged-in mode")
+    return cookies
+
+
+async def new_context(browser):
+    """Browser context with the login session applied, if available."""
+    ctx = await browser.new_context(
+        user_agent=UA, viewport={"width": 1440, "height": 900}, locale="en-US"
+    )
+    if COOKIES:
+        await ctx.add_cookies(COOKIES)
+    return ctx
+
+
+async def verify_session(browser):
+    """Return True if the loaded cookies are actually authenticated. A stale
+    session silently degrades TikTok to logged-out pages, so confirm once up
+    front rather than trusting the cookies blindly."""
+    if not COOKIES:
+        return False
+    try:
+        ctx = await new_context(browser)
+        page = await ctx.new_page()
+        await page.goto("https://www.tiktok.com/foryou?lang=en",
+                        wait_until="domcontentloaded", timeout=90000)
+        await page.wait_for_timeout(6000)
+        logged_in = await page.evaluate(
+            """() => !([...document.querySelectorAll('button,a')]
+                 .some(x => /^log in$/i.test((x.textContent || '').trim())))"""
+        )
+        await ctx.close()
+        log("session check: " + ("authenticated" if logged_in
+                                 else "NOT authenticated (cookies stale) — logged-out mode"))
+        return bool(logged_in)
+    except Exception as e:
+        log("session check failed:", e, "— logged-out mode")
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -116,9 +205,7 @@ async def collect_explore(categories, scrolls, max_secs):
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        ctx = await browser.new_context(
-            user_agent=UA, viewport={"width": 1440, "height": 900}, locale="en-US"
-        )
+        ctx = await new_context(browser)
         page = await ctx.new_page()
 
         async def on_response(resp):
@@ -199,9 +286,7 @@ async def fetch_tag_stats(tags):
             if not remaining:
                 break
             browser = await p.chromium.launch(headless=True)
-            ctx = await browser.new_context(
-                user_agent=UA, viewport={"width": 1440, "height": 900}, locale="en-US"
-            )
+            ctx = await new_context(browser)
             page = await ctx.new_page()
             detail = {}
 
@@ -242,6 +327,58 @@ async def fetch_tag_stats(tags):
     for tag in remaining:
         log(f"  WARNING: no stats captured for #{tag} (captcha or tag doesn't exist)")
     return out
+
+
+async def fetch_hashtag_videos(tags, per_tag_scrolls=6, max_secs_per_tag=45):
+    """Scrape the video grid under each hashtag (login-walled). Returns
+    {video_id: item} deduped across tags. Requires an authenticated session;
+    returns {} otherwise.
+
+    This is the payoff of logging in: instead of the few niche videos that
+    happen to appear in the logged-out Explore sample, we get the actual
+    videos posted under the niche's defining hashtags.
+    """
+    if not COOKIES:
+        return {}
+    videos = {}
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        ctx = await new_context(browser)
+        page = await ctx.new_page()
+
+        async def on_response(resp):
+            if "/api/challenge/item_list" not in resp.url:
+                return
+            try:
+                body = await resp.json()
+            except Exception:
+                return
+            for item in body.get("itemList") or []:
+                vid = item.get("id")
+                if vid:
+                    videos[vid] = item
+
+        page.on("response", on_response)
+        loop = asyncio.get_event_loop()
+        for tag in tags:
+            before = len(videos)
+            try:
+                await page.goto(f"https://www.tiktok.com/tag/{tag}?lang=en",
+                                wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_timeout(4000)
+            except Exception as e:
+                log(f"  #{tag} grid error:", e)
+                continue
+            start = loop.time()
+            for _ in range(per_tag_scrolls):
+                if loop.time() - start > max_secs_per_tag:
+                    break
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(2500)
+            log(f"  #{tag} grid: +{len(videos) - before} videos "
+                f"({len(videos)} total for niche)")
+        await browser.close()
+    return videos
 
 
 def match_niche_videos(all_items, tags, keywords):
@@ -576,7 +713,7 @@ def rank_hashtags(agg, history, niche, today_date):
 # --------------------------------------------------------------------------
 
 async def main():
-    global POOL_FILE
+    global POOL_FILE, COOKIES
     cfg = load_config()
     tz = ZoneInfo(cfg.get("timezone", "UTC"))
     now = datetime.now(timezone.utc)
@@ -585,6 +722,18 @@ async def main():
     DATA_DIR.mkdir(exist_ok=True)
     HISTORY_DIR.mkdir(exist_ok=True)
     POOL_FILE = DATA_DIR / "pool.json"
+
+    # 0. load session cookies and confirm they still authenticate; a stale
+    # session is dropped so the rest of the run proceeds logged-out
+    COOKIES = load_cookies()
+    logged_in = False
+    if COOKIES:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            logged_in = await verify_session(browser)
+            await browser.close()
+        if not logged_in:
+            COOKIES = []
 
     niche_cfg = cfg["niches"]  # ordered: config order = dashboard tab order
 
@@ -631,13 +780,19 @@ async def main():
         items = {}
         if spec.get("category"):
             items.update(collected.get(spec["category"]) or {})
+        # logged-in: pull the real video grid under the niche's defining
+        # hashtags — the main benefit of a session
+        if logged_in and spec.get("gridTags"):
+            log(f"niche '{name}': scraping hashtag video grids {spec['gridTags']}")
+            grid = await fetch_hashtag_videos(spec["gridTags"])
+            items.update(grid)
         if spec.get("matchTags") or spec.get("keywords"):
             matched = match_niche_videos(all_explore, spec.get("matchTags") or [],
                                          spec.get("keywords") or [])
             pooled = update_pool(pool, name, matched, today, pool_days,
                                  spec.get("matchTags") or [], spec.get("keywords") or [])
-            log(f"niche '{name}': {len(matched)} videos matched today, "
-                f"{len(pooled)} in {pool_days}-day pool")
+            log(f"niche '{name}': {len(matched)} explore matches, "
+                f"{len(pooled)} in {pool_days}-day pool, {len(items)} total videos")
             items.update(pooled)
         if not items and not spec.get("trackTags"):
             log(f"WARNING: niche '{name}' has no videos, omitting")
@@ -671,6 +826,7 @@ async def main():
         "date": today,
         "region": cfg.get("region", "US"),
         "timezone": cfg.get("timezone", "UTC"),
+        "sessionMode": "logged-in" if logged_in else "logged-out",
         "niches": niches_out,
         "official": official,
         "snapshotCount": len(history) + (0 if any(h.get("date") == today for h in history) else 1),

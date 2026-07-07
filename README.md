@@ -53,6 +53,33 @@ Each entry in `niches` in `config.json` becomes a dashboard tab (config order
 Commit + push config changes; the next scrape picks them up. Region and
 timezone are also set there.
 
+## Logged-in mode (much richer niche data)
+
+Logged out, TikTok only exposes a handful of niche videos through the Explore
+feed. With a session, the scraper reads the **full video grid under each
+hashtag** — hundreds of real videos per niche instead of a few — so trending
+sounds, hashtags, posting hours, and sampled videos for product niches like
+MathGPT and Shapes become accurate. The dashboard header shows 🔓 logged-in or
+🔒 logged-out for each run.
+
+To enable it, provide a TikTok session as a cookies JSON (`{ "sessionid": "…",
+"ttwid": "…", … }`, the full cookie set from a logged-in tiktok.com):
+
+- **Locally:** save it to `scraper/cookies.json` (gitignored — never commit it).
+- **In GitHub Actions:** add a repo secret `TIKTOK_COOKIES` with the same JSON
+  (Settings → Secrets and variables → Actions → New repository secret). The
+  workflow passes it to the scraper as an env var; it never appears in code or
+  logs.
+
+Which hashtags each niche pulls videos from is set by its `gridTags` in
+`config.json`. The scraper verifies the session on every run and silently
+falls back to logged-out mode if it's missing or expired.
+
+**Warnings:** a session cookie is a live login to that account — treat it like
+a password. Use a **throwaway account**, not your creator account: automated
+scraping can get an account restricted. Sessions expire after some weeks; when
+runs flip to 🔒 logged-out, re-export the cookies.
+
 ## Run locally
 
 ```sh

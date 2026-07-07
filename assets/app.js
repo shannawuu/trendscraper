@@ -151,7 +151,9 @@ function renderSounds(niche) {
   tbody.innerHTML = "";
   const snapshots = DATA.snapshotCount || 1;
   $("#sounds-note").textContent = niche.custom
-    ? `${niche.videosSampled} niche videos matched by hashtag/keyword (pooled over recent runs)`
+    ? DATA.sessionMode === "logged-in"
+      ? `${niche.videosSampled} videos pulled live from this niche's hashtags`
+      : `${niche.videosSampled} niche videos matched from the explore sample (log in for full hashtag data)`
     : snapshots < 3
       ? `Collecting baseline (${snapshots} snapshot${snapshots > 1 ? "s" : ""}) — predictions sharpen after a few daily runs`
       : `${niche.videosSampled} videos sampled`;
@@ -403,7 +405,12 @@ async function init() {
   }
 
   currentNiche = Object.keys(DATA.niches)[0];
-  $("#last-updated").textContent = `Updated ${timeAgo(DATA.generatedAt)}`;
+  const mode = DATA.sessionMode === "logged-in"
+    ? " · 🔓 logged-in (full hashtag data)"
+    : DATA.sessionMode === "logged-out"
+      ? " · 🔒 logged-out (limited)"
+      : "";
+  $("#last-updated").textContent = `Updated ${timeAgo(DATA.generatedAt)}${mode}`;
   const ageH = (Date.now() - new Date(DATA.generatedAt).getTime()) / 36e5;
   if (ageH > 36) $("#last-updated").textContent += " ⚠️ (stale — check the Action)";
   $("#dashboard").classList.remove("hidden");

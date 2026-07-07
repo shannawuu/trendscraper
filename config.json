@@ -3,11 +3,13 @@
   "timezone": "America/Toronto",
   "niches": {
     "MathGPT (Study)": {
+      "gridTags": ["mathgpt", "mathtok", "mathhelp", "studytok", "studyhacks"],
       "trackTags": ["mathgpt", "mathtok", "studytok", "mathhelp", "studyhacks", "homeworkhelp", "studytips", "calculus", "studymotivation", "backtoschool"],
       "matchTags": ["mathgpt", "math", "mathematics", "maths", "mathtok", "matematik", "study", "studying", "studytok", "school", "student", "students", "college", "university", "homework", "homeworkhelp", "exam", "exams", "finals", "finalsweek", "teacher", "education", "learning", "studyhacks", "studytips", "studymotivation", "calculus", "algebra", "geometry", "tutor", "tutoring", "sat", "backtoschool", "studywithme", "studygram"],
       "keywords": ["mathgpt", "math homework", "math test", "math exam", "math class", "study with me", "study hack", "how to study", "studying for", "final exam", "midterm"]
     },
     "Shapes (AI Texting)": {
+      "gridTags": ["shapesinc", "characterai", "aichatbot", "textingstory", "aicompanion"],
       "trackTags": ["shapesinc", "shapesai", "characterai", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "fakechat", "chatbot"],
       "matchTags": ["shapesinc", "shapesai", "characterai", "cai", "ai", "artificialintelligence", "aivideo", "chatbot", "chatbots", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "faketext", "fakechat", "texting", "textmessage", "textstory", "airoleplay", "chatgpt", "openai", "aitok", "aiedit", "aicontent"],
       "keywords": ["character ai", "c.ai", "characterai", "chatbot", "chat bot", "ai boyfriend", "ai girlfriend", "texting story", "shapes inc", "shapes.inc", "ai companion", "ai chat", "ai texting", "talking to ai", "artificial intelligence"]

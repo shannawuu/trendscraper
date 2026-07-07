@@ -16,7 +16,8 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # logged-in runs scrape hashtag grids and take longer than logged-out
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +31,11 @@ jobs:
           python -m playwright install --with-deps chromium
 
       - name: Run scraper
+        env:
+          # Optional TikTok session for logged-in scraping (richer per-niche
+          # video data). Add repo secret TIKTOK_COOKIES = the cookies JSON.
+          # Without it, the scraper runs in logged-out mode automatically.
+          TIKTOK_COOKIES: ${{ secrets.TIKTOK_COOKIES }}
         run: python scraper/scrape.py
 
       - name: Commit updated data
