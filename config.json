@@ -1,7 +1,17 @@
 {
   "region": "US",
   "timezone": "America/Toronto",
-  "niches": ["All", "Beauty Care", "Food", "Fitness & Health", "Games"],
+  "niches": ["All", "Education", "Relationship", "Beauty Care", "Food", "Fitness & Health", "Games"],
+  "customNiches": {
+    "MathGPT (Study)": {
+      "tags": ["mathgpt", "mathtok", "studytok", "mathhelp", "studyhacks", "homeworkhelp", "studytips", "calculus", "studymotivation", "backtoschool"],
+      "keywords": ["mathgpt", "homework", "math class", "study hack", "studying", "math test", "final exam"]
+    },
+    "Shapes (AI Texting)": {
+      "tags": ["shapesinc", "shapesai", "characterai", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "fakechat", "chatbot"],
+      "keywords": ["character ai", "c.ai", "chatbot", "ai boyfriend", "ai girlfriend", "texting story", "roleplay bot", "shapes inc", "ai companion"]
+    }
+  },
   "availableNiches": [
     "All", "Singing & Dancing", "Comedy", "Sports", "Anime & Comics",
     "Relationship", "Shows", "Lipsync", "Daily Life", "Beauty Care",

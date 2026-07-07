@@ -107,6 +107,8 @@ tr:hover td { background: var(--card-2); }
 .badge.new { background: rgba(37,244,238,.12); color: var(--cyan); }
 .badge.steady { background: rgba(138,138,153,.15); color: var(--muted); }
 .badge.cooling { background: rgba(251,191,36,.12); color: var(--amber); }
+.badge.active { background: rgba(37,244,238,.12); color: var(--cyan); }
+.badge.quiet { background: rgba(138,138,153,.15); color: var(--muted); }
 
 .tag-list { list-style: none; }
 .tag-list li {

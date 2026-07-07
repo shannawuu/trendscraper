@@ -29,7 +29,22 @@
     </section>
 
     <div id="dashboard" class="hidden">
-      <section class="card">
+      <section class="card hidden" id="tracked-card">
+        <div class="card-head">
+          <h2>&#128204; Product hashtags</h2>
+          <span class="muted small" id="tracked-note"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="tracked-table">
+            <thead>
+              <tr><th>Hashtag</th><th>Signal</th><th>Total views</th><th>Views gained</th><th>Posts</th><th>Trajectory</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" id="sounds-card">
         <div class="card-head">
           <h2>&#127925; Trending sounds</h2>
           <span class="muted" id="sounds-note"></span>
@@ -45,7 +60,7 @@
       </section>
 
       <div class="two-col">
-        <section class="card">
+        <section class="card" id="hashtags-card">
           <div class="card-head"><h2>&#35;&#65039;&#8419; Trending hashtags <span class="muted small">(this niche)</span></h2></div>
           <ul id="hashtag-list" class="tag-list"></ul>
         </section>
@@ -62,14 +77,14 @@
       </div>
 
       <div class="two-col">
-        <section class="card">
+        <section class="card" id="hours-card">
           <div class="card-head"><h2>&#9200; Best posting hours</h2><span class="muted small" id="hours-tz"></span></div>
           <div id="hours-chart"></div>
           <p class="muted small">Engagement-weighted estimate from when this niche's trending videos were posted.
           Heuristic, not official TikTok data.</p>
         </section>
 
-        <section class="card">
+        <section class="card" id="videos-card">
           <div class="card-head"><h2>&#128293; Top videos sampled</h2></div>
           <ul id="videos-list" class="video-list"></ul>
         </section>

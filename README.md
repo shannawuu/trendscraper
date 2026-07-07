@@ -38,6 +38,15 @@ Edit `niches` in `config.json` (any of the categories in `availableNiches`),
 commit, and push. The next scrape picks them up. Region and timezone are also
 set there.
 
+### Custom product niches
+
+`customNiches` defines hashtag-based niches (e.g. for UGC products like
+MathGPT or Shapes). Each one lists `tags` — hashtags whose lifetime
+view/video counts are snapshotted every run, giving exact day-over-day
+growth — and `keywords` used to match related videos from the explore
+sample for sound/posting-hour analysis. Tag pages are occasionally
+captcha-walled; the scraper retries once and skips misses (gaps are fine).
+
 ## Run locally
 
 ```sh

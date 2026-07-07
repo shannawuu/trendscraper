@@ -184,6 +184,120 @@ async def collect_explore(cfg):
 
 
 # --------------------------------------------------------------------------
+# Custom niche hashtag stats (tag pages)
+# --------------------------------------------------------------------------
+
+async def fetch_tag_stats(tags):
+    """Fetch lifetime video/view counts for specific hashtags from their tag
+    pages. TikTok sometimes throws a captcha at these; failed tags are retried
+    once with a fresh browser and otherwise skipped (momentum tolerates gaps).
+
+    Returns {tag: {"v": viewCount, "n": videoCount}}.
+    """
+    out = {}
+    remaining = list(tags)
+    async with async_playwright() as p:
+        for attempt in range(2):
+            if not remaining:
+                break
+            browser = await p.chromium.launch(headless=True)
+            ctx = await browser.new_context(
+                user_agent=UA, viewport={"width": 1440, "height": 900}, locale="en-US"
+            )
+            page = await ctx.new_page()
+            detail = {}
+
+            async def on_response(resp):
+                if "/api/challenge/detail" not in resp.url:
+                    return
+                try:
+                    body = await resp.json()
+                except Exception:
+                    return
+                ci = body.get("challengeInfo") or {}
+                title = ((ci.get("challenge") or {}).get("title") or "").lower()
+                stats = ci.get("statsV2") or ci.get("stats") or {}
+                if title:
+                    detail[title] = {
+                        "v": int(stats.get("viewCount") or 0),
+                        "n": int(stats.get("videoCount") or 0),
+                    }
+
+            page.on("response", on_response)
+            failed = []
+            for tag in remaining:
+                try:
+                    await page.goto(f"https://www.tiktok.com/tag/{tag}?lang=en",
+                                    wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_timeout(4000)
+                except Exception as e:
+                    log(f"  tag page error for #{tag}:", e)
+                if tag.lower() in detail:
+                    out[tag] = detail[tag.lower()]
+                    log(f"  #{tag}: {out[tag]['v']:,} views, {out[tag]['n']:,} videos")
+                else:
+                    failed.append(tag)
+            await browser.close()
+            remaining = failed
+            if failed and attempt == 0:
+                log(f"  retrying {len(failed)} tags with a fresh browser: {failed}")
+    for tag in remaining:
+        log(f"  WARNING: no stats captured for #{tag} (captcha or tag doesn't exist)")
+    return out
+
+
+def match_custom_videos(all_items, tags, keywords):
+    """Videos from the explore sample that belong to a custom niche, matched
+    by hashtag or caption keyword."""
+    tagset = {t.lower() for t in tags}
+    kws = [k.lower() for k in keywords]
+    out = {}
+    for vid, item in all_items.items():
+        chs = {(c.get("title") or "").lower() for c in item.get("challenges") or []}
+        desc = (item.get("desc") or "").lower()
+        if chs & tagset or any(k in desc for k in kws):
+            out[vid] = item
+    return out
+
+
+def tag_momentum(series):
+    """Label growth of a tag's cumulative view count across snapshots."""
+    if len(series) < 2:
+        return {"label": "new", "deltaViews": None}
+    deltas = [series[i]["v"] - series[i - 1]["v"] for i in range(1, len(series))]
+    d_last = deltas[-1]
+    if len(deltas) == 1:
+        return {"label": "active" if d_last > 0 else "quiet", "deltaViews": d_last}
+    d_prev = deltas[-2]
+    if d_last > max(d_prev * 1.15, 0):
+        label = "rising"
+    elif d_last < d_prev * 0.7:
+        label = "cooling"
+    else:
+        label = "steady"
+    return {"label": label, "deltaViews": d_last}
+
+
+def build_tracked_tags(stats, history, niche, today):
+    out = []
+    for tag, st in stats.items():
+        series = []
+        for snap in history:
+            entry = (((snap.get("niches") or {}).get(niche) or {}).get("tags") or {}).get(tag)
+            if entry and snap.get("date") != today:
+                series.append({"date": snap["date"], "v": entry["v"], "n": entry["n"]})
+        series.append({"date": today, "v": st["v"], "n": st["n"]})
+        m = tag_momentum(series)
+        out.append({
+            "tag": tag, "views": st["v"], "videos": st["n"],
+            "url": f"https://www.tiktok.com/tag/{tag}",
+            "trend": {**m, "history": series},
+        })
+    out.sort(key=lambda t: t["views"], reverse=True)
+    return out
+
+
+# --------------------------------------------------------------------------
 # Creative Center official hashtags
 # --------------------------------------------------------------------------
 
@@ -421,6 +535,12 @@ async def main():
     collected = await collect_explore(cfg)
     official = await fetch_official_hashtags(cfg.get("region", "US"))
 
+    custom = cfg.get("customNiches") or {}
+    custom_tag_stats = {}
+    for name, spec in custom.items():
+        log(f"fetching tag stats for custom niche: {name}")
+        custom_tag_stats[name] = await fetch_tag_stats(spec.get("tags") or [])
+
     total_videos = sum(len(v) for v in collected.values())
     log(f"total videos collected: {total_videos}")
     if total_videos == 0:
@@ -448,6 +568,35 @@ async def main():
                        for mid, s in agg["sounds"].items()},
             "hashtags": {t: {"c": h["videoCount"], "p": h["totalPlays"]}
                          for t, h in agg["hashtags"].items()},
+        }
+
+    # custom (hashtag-defined) niches: tracked tag growth + any explore videos
+    # that match the niche's tags/keywords
+    all_explore = {}
+    for items in collected.values():
+        all_explore.update(items)
+    for name, spec in custom.items():
+        matched = match_custom_videos(all_explore, spec.get("tags") or [],
+                                      spec.get("keywords") or [])
+        agg = aggregate_niche(matched, tz) if matched else None
+        log(f"custom niche '{name}': {len(matched)} explore videos matched, "
+            f"{len(custom_tag_stats.get(name) or {})} tags tracked")
+        niches_out[name] = {
+            "custom": True,
+            "videosSampled": len(matched),
+            "trackedTags": build_tracked_tags(custom_tag_stats.get(name) or {},
+                                              history, name, today),
+            "sounds": rank_sounds(agg, history, name, today) if agg else [],
+            "hashtags": rank_hashtags(agg, history, name, today) if agg else [],
+            "postingHours": agg["postingHours"] if agg else None,
+            "topVideos": agg["topVideos"] if agg else [],
+        }
+        snapshot_niches[name] = {
+            "sounds": {mid: {"c": s["videoCount"], "p": s["totalPlays"]}
+                       for mid, s in (agg["sounds"] if agg else {}).items()},
+            "hashtags": {t: {"c": h["videoCount"], "p": h["totalPlays"]}
+                         for t, h in (agg["hashtags"] if agg else {}).items()},
+            "tags": custom_tag_stats.get(name) or {},
         }
 
     latest = {

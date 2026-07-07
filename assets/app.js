@@ -32,7 +32,10 @@ function esc(s) {
 }
 
 function badge(label) {
-  const text = { rising: "▲ RISING", new: "✦ NEW", steady: "STEADY", cooling: "▼ COOLING" }[label] || label;
+  const text = {
+    rising: "▲ RISING", new: "✦ NEW", steady: "STEADY", cooling: "▼ COOLING",
+    active: "● ACTIVE", quiet: "QUIET",
+  }[label] || label;
   return `<span class="badge ${esc(label)}">${text}</span>`;
 }
 
@@ -76,12 +79,40 @@ function renderTabs() {
   });
 }
 
+function renderTracked(niche) {
+  const card = $("#tracked-card");
+  const tags = niche.trackedTags || [];
+  if (!tags.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("#tracked-note").textContent = "lifetime hashtag stats, snapshotted each run";
+  const tbody = $("#tracked-table tbody");
+  tbody.innerHTML = "";
+  tags.forEach((t) => {
+    const d = t.trend.deltaViews;
+    const delta = d == null ? '<span class="muted">baseline</span>'
+      : `<span style="color:${d > 0 ? "var(--green)" : "var(--muted)"}">${d > 0 ? "+" : ""}${fmt(d)}</span>`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="sound-title"><a href="${esc(t.url)}" target="_blank" rel="noopener">#${esc(t.tag)}</a></td>
+      <td>${badge(t.trend.label)}</td>
+      <td>${fmt(t.views)}</td>
+      <td>${delta}</td>
+      <td>${fmt(t.videos)}</td>
+      <td>${sparkline(t.trend.history.map((p) => ({ p: p.v })))}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 function renderSounds(niche) {
+  const card = $("#sounds-card");
+  if (!niche.sounds || !niche.sounds.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
   const tbody = $("#sounds-table tbody");
   tbody.innerHTML = "";
   const snapshots = DATA.snapshotCount || 1;
-  $("#sounds-note").textContent =
-    snapshots < 3
+  $("#sounds-note").textContent = niche.custom
+    ? `${niche.videosSampled} videos matched from the explore sample`
+    : snapshots < 3
       ? `Collecting baseline (${snapshots} snapshot${snapshots > 1 ? "s" : ""}) — predictions sharpen after a few daily runs`
       : `${niche.videosSampled} videos sampled`;
 
@@ -103,6 +134,9 @@ function renderSounds(niche) {
 }
 
 function renderHashtags(niche) {
+  const card = $("#hashtags-card");
+  if (!niche.hashtags || !niche.hashtags.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
   const ul = $("#hashtag-list");
   ul.innerHTML = "";
   niche.hashtags.slice(0, 15).forEach((h) => {
@@ -133,8 +167,11 @@ function renderOfficial() {
 }
 
 function renderHours(niche) {
-  const el = $("#hours-chart");
+  const card = $("#hours-card");
   const ph = niche.postingHours;
+  if (!ph || !ph.sampleSize) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  const el = $("#hours-chart");
   $("#hours-tz").textContent = `${DATA.timezone} · ${ph.sampleSize} videos`;
   const vals = ph.byHourWeighted;
   const max = Math.max(...vals) || 1;
@@ -155,6 +192,9 @@ function renderHours(niche) {
 }
 
 function renderVideos(niche) {
+  const card = $("#videos-card");
+  if (!niche.topVideos || !niche.topVideos.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
   const ul = $("#videos-list");
   ul.innerHTML = "";
   niche.topVideos.slice(0, 8).forEach((v) => {
@@ -171,6 +211,7 @@ function render() {
   renderTabs();
   const niche = DATA.niches[currentNiche];
   if (!niche) return;
+  renderTracked(niche);
   renderSounds(niche);
   renderHashtags(niche);
   renderOfficial();
