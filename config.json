@@ -1,18 +1,29 @@
 {
   "region": "US",
   "timezone": "America/Toronto",
-  "niches": ["All", "Education", "Relationship", "Beauty Care", "Food", "Fitness & Health", "Games"],
-  "customNiches": {
+  "niches": {
     "MathGPT (Study)": {
-      "tags": ["mathgpt", "mathtok", "studytok", "mathhelp", "studyhacks", "homeworkhelp", "studytips", "calculus", "studymotivation", "backtoschool"],
-      "keywords": ["mathgpt", "homework", "math class", "study hack", "studying", "math test", "final exam"]
+      "trackTags": ["mathgpt", "mathtok", "studytok", "mathhelp", "studyhacks", "homeworkhelp", "studytips", "calculus", "studymotivation", "backtoschool"],
+      "matchTags": ["mathgpt", "math", "mathematics", "maths", "mathtok", "matematik", "study", "studying", "studytok", "school", "student", "students", "college", "university", "homework", "homeworkhelp", "exam", "exams", "finals", "finalsweek", "teacher", "education", "learning", "studyhacks", "studytips", "studymotivation", "calculus", "algebra", "geometry", "tutor", "tutoring", "sat", "backtoschool", "studywithme", "studygram"],
+      "keywords": ["mathgpt", "math homework", "math test", "math exam", "math class", "study with me", "study hack", "how to study", "studying for", "final exam", "midterm"]
     },
     "Shapes (AI Texting)": {
-      "tags": ["shapesinc", "shapesai", "characterai", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "fakechat", "chatbot"],
-      "keywords": ["character ai", "c.ai", "chatbot", "ai boyfriend", "ai girlfriend", "texting story", "roleplay bot", "shapes inc", "ai companion"]
-    }
+      "trackTags": ["shapesinc", "shapesai", "characterai", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "fakechat", "chatbot"],
+      "matchTags": ["shapesinc", "shapesai", "characterai", "cai", "ai", "artificialintelligence", "aivideo", "chatbot", "chatbots", "aichatbot", "aicompanion", "aiboyfriend", "aigirlfriend", "textingstory", "faketext", "fakechat", "texting", "textmessage", "textstory", "airoleplay", "chatgpt", "openai", "aitok", "aiedit", "aicontent"],
+      "keywords": ["character ai", "c.ai", "characterai", "chatbot", "chat bot", "ai boyfriend", "ai girlfriend", "texting story", "shapes inc", "shapes.inc", "ai companion", "ai chat", "ai texting", "talking to ai", "artificial intelligence"]
+    },
+    "All": { "category": "All" },
+    "Education & Career": {
+      "category": "Education",
+      "matchTags": ["internship", "internships", "career", "careertok", "careeradvice", "corporate", "corporatetok", "jobsearch", "jobinterview", "interview", "resume", "linkedin", "worklife", "9to5", "firstjob", "newgrad", "salary", "jobtips"],
+      "keywords": ["internship", "career", "job interview", "resume", "new grad", "corporate"]
+    },
+    "Beauty Care": { "category": "Beauty Care" },
+    "Food": { "category": "Food" },
+    "Games": { "category": "Games" }
   },
-  "availableNiches": [
+  "extraCategories": ["Technology", "Anime & Comics", "Relationship", "Comedy", "Daily Life", "Drama"],
+  "availableCategories": [
     "All", "Singing & Dancing", "Comedy", "Sports", "Anime & Comics",
     "Relationship", "Shows", "Lipsync", "Daily Life", "Beauty Care",
     "Games", "Society", "Outfit", "Cars", "Food", "Animals", "Family",
@@ -20,5 +31,6 @@
   ],
   "scrollsPerCategory": 10,
   "maxSecondsPerCategory": 100,
-  "historyDays": 14
+  "historyDays": 14,
+  "poolDays": 7
 }

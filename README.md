@@ -34,18 +34,24 @@ click **Update now** (or press *Run workflow* in the Actions tab).
 
 ## Changing niches
 
-Edit `niches` in `config.json` (any of the categories in `availableNiches`),
-commit, and push. The next scrape picks them up. Region and timezone are also
-set there.
+Each entry in `niches` in `config.json` becomes a dashboard tab (config order
+= tab order). A niche can combine any of:
 
-### Custom product niches
+- `category` — one of TikTok's explore categories (see `availableCategories`);
+  its whole feed is sampled every run.
+- `matchTags` / `keywords` — pull matching videos from *all* scraped explore
+  feeds into the niche. Hashtags match exactly and keywords match on word
+  boundaries. Matches accumulate in a rolling pool (`data/pool.json`,
+  `poolDays` days) so hashtag-defined product niches build up enough videos
+  for sound/hashtag/posting-hour analysis even though any single day's
+  explore sample contains few of them.
+- `trackTags` — product hashtags whose lifetime view/video counts are
+  snapshotted every run from their tag pages, giving exact day-over-day
+  growth ("Product hashtags" card). Tag pages are occasionally
+  captcha-walled; the scraper retries once and skips misses (gaps are fine).
 
-`customNiches` defines hashtag-based niches (e.g. for UGC products like
-MathGPT or Shapes). Each one lists `tags` — hashtags whose lifetime
-view/video counts are snapshotted every run, giving exact day-over-day
-growth — and `keywords` used to match related videos from the explore
-sample for sound/posting-hour analysis. Tag pages are occasionally
-captcha-walled; the scraper retries once and skips misses (gaps are fine).
+Commit + push config changes; the next scrape picks them up. Region and
+timezone are also set there.
 
 ## Run locally
 

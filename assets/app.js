@@ -63,6 +63,46 @@ function sparkline(points, width = 110, height = 30) {
   </svg>`;
 }
 
+// Trajectory cell: sparkline + explicit change vs previous snapshot + a
+// per-day tooltip. `history` is [{date, <key>: value}, ...] oldest→newest.
+function trajectoryCell(history, key, unit) {
+  const pts = history.map((p) => ({ p: p[key] }));
+  const spark = sparkline(pts, 120, 26);
+  let label;
+  if (history.length < 2) {
+    label = '<span class="muted small">first seen today</span>';
+  } else {
+    const prev = history[history.length - 2][key];
+    const cur = history[history.length - 1][key];
+    const diff = cur - prev;
+    const pct = prev > 0 ? (diff / prev) * 100 : 0;
+    const color = pct > 5 ? "var(--green)" : pct < -5 ? "var(--amber)" : "var(--muted)";
+    const sign = diff >= 0 ? "+" : "";
+    label = `<span class="small" style="color:${color}">${sign}${pct.toFixed(0)}% ${unit} vs prev · ${history.length}d tracked</span>`;
+  }
+  const tip = history.map((p) => `${p.date}: ${fmt(p[key])} ${unit}`).join("\n");
+  return `<div title="${esc(tip)}">${spark}<div>${label}</div></div>`;
+}
+
+// Tracked product hashtags: views are cumulative, so show views gained per day.
+function trackedTrajectory(history) {
+  const pts = history.map((p) => ({ p: p.v }));
+  const spark = sparkline(pts, 120, 26);
+  let label;
+  if (history.length < 2) {
+    label = '<span class="muted small">baseline day</span>';
+  } else {
+    const gained = history[history.length - 1].v - history[history.length - 2].v;
+    const color = gained > 0 ? "var(--green)" : "var(--muted)";
+    label = `<span class="small" style="color:${color}">+${fmt(Math.max(gained, 0))} views today · ${history.length}d tracked</span>`;
+  }
+  const tip = history.map((p, i) => {
+    const gained = i > 0 ? ` (+${fmt(p.v - history[i - 1].v)})` : "";
+    return `${p.date}: ${fmt(p.v)} views${gained}`;
+  }).join("\n");
+  return `<div title="${esc(tip)}">${spark}<div>${label}</div></div>`;
+}
+
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
@@ -98,7 +138,7 @@ function renderTracked(niche) {
       <td>${fmt(t.views)}</td>
       <td>${delta}</td>
       <td>${fmt(t.videos)}</td>
-      <td>${sparkline(t.trend.history.map((p) => ({ p: p.v })))}</td>`;
+      <td>${trackedTrajectory(t.trend.history)}</td>`;
     tbody.appendChild(tr);
   });
 }
@@ -111,7 +151,7 @@ function renderSounds(niche) {
   tbody.innerHTML = "";
   const snapshots = DATA.snapshotCount || 1;
   $("#sounds-note").textContent = niche.custom
-    ? `${niche.videosSampled} videos matched from the explore sample`
+    ? `${niche.videosSampled} niche videos matched by hashtag/keyword (pooled over recent runs)`
     : snapshots < 3
       ? `Collecting baseline (${snapshots} snapshot${snapshots > 1 ? "s" : ""}) — predictions sharpen after a few daily runs`
       : `${niche.videosSampled} videos sampled`;
@@ -128,7 +168,7 @@ function renderSounds(niche) {
       <td>${badge(s.trend.label)}</td>
       <td>${s.videoCount}</td>
       <td>${fmt(s.totalPlays)}</td>
-      <td>${sparkline(s.trend.history)}</td>`;
+      <td>${trajectoryCell(s.trend.history, "p", "plays")}</td>`;
     tbody.appendChild(tr);
   });
 }

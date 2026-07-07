@@ -20,7 +20,7 @@ import math
 import re
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -101,17 +101,15 @@ async def click_category(page, label):
         return False
 
 
-async def collect_explore(cfg):
-    """Returns {niche_label: {video_id: item_dict}} from the explore feed.
+async def collect_explore(categories, scrolls, max_secs):
+    """Returns {category_label: {video_id: item_dict}} from the explore feed.
 
-    Explore batches are attributed to niches via the categoryType query param
-    on the item_list requests. The page loads on "All" (categoryType 120);
-    each category chip click switches the feed to a new categoryType, which we
-    discover as the first unseen categoryType after the click.
+    Explore batches are attributed to categories via the categoryType query
+    param on the item_list requests. The page loads on "All" (categoryType
+    120); each category chip click switches the feed to a new categoryType,
+    which we discover as the first unseen categoryType after the click.
     """
-    niches = cfg["niches"]
-    scrolls = int(cfg.get("scrollsPerCategory", 10))
-    max_secs = int(cfg.get("maxSecondsPerCategory", 100))
+    niches = categories
 
     buckets = defaultdict(dict)          # categoryType -> {video_id: item}
     cat_of = {"All": "120"}              # niche label -> categoryType
@@ -246,18 +244,72 @@ async def fetch_tag_stats(tags):
     return out
 
 
-def match_custom_videos(all_items, tags, keywords):
-    """Videos from the explore sample that belong to a custom niche, matched
-    by hashtag or caption keyword."""
+def match_niche_videos(all_items, tags, keywords):
+    """Videos from the explore sample that belong to a niche.
+
+    Hashtags match exactly; caption keywords match on word boundaries only
+    (so "homework" never matches "#athomeworkout").
+    """
     tagset = {t.lower() for t in tags}
-    kws = [k.lower() for k in keywords]
+    kw_res = [re.compile(r"\b" + re.escape(k.lower()) + r"\b") for k in keywords]
     out = {}
     for vid, item in all_items.items():
         chs = {(c.get("title") or "").lower() for c in item.get("challenges") or []}
         desc = (item.get("desc") or "").lower()
-        if chs & tagset or any(k in desc for k in kws):
+        if chs & tagset or any(r.search(desc) for r in kw_res):
             out[vid] = item
     return out
+
+
+# --------------------------------------------------------------------------
+# Rolling video pool for hashtag-defined niches
+# --------------------------------------------------------------------------
+# Tag-matched videos are rare in any single day's explore sample, so they are
+# accumulated in data/pool.json for `poolDays` days and niches aggregate over
+# the whole pool.
+
+POOL_FILE = None  # set in main() to DATA_DIR / "pool.json"
+
+
+def compact_item(item):
+    music = item.get("music") or {}
+    stats = item.get("stats") or {}
+    return {
+        "id": item["id"],
+        "desc": (item.get("desc") or "")[:200],
+        "createTime": item.get("createTime"),
+        "author": {"uniqueId": (item.get("author") or {}).get("uniqueId") or ""},
+        "music": {k: music.get(k) for k in ("id", "title", "authorName", "original")},
+        "challenges": [{"title": c.get("title") or ""} for c in item.get("challenges") or []],
+        "stats": {"playCount": int(stats.get("playCount") or 0),
+                  "diggCount": int(stats.get("diggCount") or 0)},
+    }
+
+
+def load_pool():
+    try:
+        return json.loads(POOL_FILE.read_text())
+    except Exception:
+        return {"niches": {}}
+
+
+def update_pool(pool, niche, matched, today, pool_days, tags, keywords):
+    """Merge today's matches into the niche's pool, prune stale entries, and
+    return the pooled items ready for aggregation.
+
+    Previously pooled videos are re-checked against the current matching
+    rules, so tightening tags/keywords in config.json retroactively cleans
+    the pool."""
+    entry = pool["niches"].setdefault(niche, {})
+    for vid, item in matched.items():
+        entry[vid] = {"seen": today, "item": compact_item(item)}
+    cutoff = (datetime.strptime(today, "%Y-%m-%d") - timedelta(days=pool_days)).strftime("%Y-%m-%d")
+    still_valid = match_niche_videos(
+        {vid: rec["item"] for vid, rec in entry.items()}, tags, keywords)
+    for vid in [v for v, rec in entry.items()
+                if rec.get("seen", "") < cutoff or v not in still_valid]:
+        del entry[vid]
+    return {vid: rec["item"] for vid, rec in entry.items()}
 
 
 def tag_momentum(series):
@@ -524,6 +576,7 @@ def rank_hashtags(agg, history, niche, today_date):
 # --------------------------------------------------------------------------
 
 async def main():
+    global POOL_FILE
     cfg = load_config()
     tz = ZoneInfo(cfg.get("timezone", "UTC"))
     now = datetime.now(timezone.utc)
@@ -531,15 +584,31 @@ async def main():
 
     DATA_DIR.mkdir(exist_ok=True)
     HISTORY_DIR.mkdir(exist_ok=True)
+    POOL_FILE = DATA_DIR / "pool.json"
 
-    collected = await collect_explore(cfg)
+    niche_cfg = cfg["niches"]  # ordered: config order = dashboard tab order
+
+    # 1. scrape every explore category any niche uses, plus extra categories
+    # that only feed the tag/keyword matching pool (not shown as tabs)
+    categories = []
+    for spec in niche_cfg.values():
+        cat = spec.get("category")
+        if cat and cat not in categories:
+            categories.append(cat)
+    for cat in cfg.get("extraCategories") or []:
+        if cat not in categories:
+            categories.append(cat)
+    collected = await collect_explore(categories,
+                                      int(cfg.get("scrollsPerCategory", 10)),
+                                      int(cfg.get("maxSecondsPerCategory", 100)))
     official = await fetch_official_hashtags(cfg.get("region", "US"))
 
-    custom = cfg.get("customNiches") or {}
-    custom_tag_stats = {}
-    for name, spec in custom.items():
-        log(f"fetching tag stats for custom niche: {name}")
-        custom_tag_stats[name] = await fetch_tag_stats(spec.get("tags") or [])
+    # 2. tag stats for niches that track product hashtags
+    tag_stats = {}
+    for name, spec in niche_cfg.items():
+        if spec.get("trackTags"):
+            log(f"fetching tag stats for: {name}")
+            tag_stats[name] = await fetch_tag_stats(spec["trackTags"])
 
     total_videos = sum(len(v) for v in collected.values())
     log(f"total videos collected: {total_videos}")
@@ -548,56 +617,54 @@ async def main():
         sys.exit(1)
 
     history = load_history(int(cfg.get("historyDays", 14)))
+    pool = load_pool()
+    pool_days = int(cfg.get("poolDays", 7))
 
-    niches_out = {}
-    snapshot_niches = {}
-    for label, items in collected.items():
-        if not items:
-            log(f"WARNING: niche '{label}' collected 0 videos, omitting")
-            continue
-        agg = aggregate_niche(items, tz)
-        niches_out[label] = {
-            "videosSampled": agg["videosSampled"],
-            "sounds": rank_sounds(agg, history, label, today),
-            "hashtags": rank_hashtags(agg, history, label, today),
-            "postingHours": agg["postingHours"],
-            "topVideos": agg["topVideos"],
-        }
-        snapshot_niches[label] = {
-            "sounds": {mid: {"c": s["videoCount"], "p": s["totalPlays"]}
-                       for mid, s in agg["sounds"].items()},
-            "hashtags": {t: {"c": h["videoCount"], "p": h["totalPlays"]}
-                         for t, h in agg["hashtags"].items()},
-        }
-
-    # custom (hashtag-defined) niches: tracked tag growth + any explore videos
-    # that match the niche's tags/keywords
     all_explore = {}
     for items in collected.values():
         all_explore.update(items)
-    for name, spec in custom.items():
-        matched = match_custom_videos(all_explore, spec.get("tags") or [],
-                                      spec.get("keywords") or [])
-        agg = aggregate_niche(matched, tz) if matched else None
-        log(f"custom niche '{name}': {len(matched)} explore videos matched, "
-            f"{len(custom_tag_stats.get(name) or {})} tags tracked")
+
+    # 3. build each niche: explore category items + pooled tag/keyword matches
+    niches_out = {}
+    snapshot_niches = {}
+    for name, spec in niche_cfg.items():
+        items = {}
+        if spec.get("category"):
+            items.update(collected.get(spec["category"]) or {})
+        if spec.get("matchTags") or spec.get("keywords"):
+            matched = match_niche_videos(all_explore, spec.get("matchTags") or [],
+                                         spec.get("keywords") or [])
+            pooled = update_pool(pool, name, matched, today, pool_days,
+                                 spec.get("matchTags") or [], spec.get("keywords") or [])
+            log(f"niche '{name}': {len(matched)} videos matched today, "
+                f"{len(pooled)} in {pool_days}-day pool")
+            items.update(pooled)
+        if not items and not spec.get("trackTags"):
+            log(f"WARNING: niche '{name}' has no videos, omitting")
+            continue
+
+        agg = aggregate_niche(items, tz) if items else None
         niches_out[name] = {
-            "custom": True,
-            "videosSampled": len(matched),
-            "trackedTags": build_tracked_tags(custom_tag_stats.get(name) or {},
-                                              history, name, today),
+            "custom": not spec.get("category"),
+            "videosSampled": len(items),
             "sounds": rank_sounds(agg, history, name, today) if agg else [],
             "hashtags": rank_hashtags(agg, history, name, today) if agg else [],
             "postingHours": agg["postingHours"] if agg else None,
             "topVideos": agg["topVideos"] if agg else [],
         }
+        if spec.get("trackTags"):
+            niches_out[name]["trackedTags"] = build_tracked_tags(
+                tag_stats.get(name) or {}, history, name, today)
         snapshot_niches[name] = {
             "sounds": {mid: {"c": s["videoCount"], "p": s["totalPlays"]}
                        for mid, s in (agg["sounds"] if agg else {}).items()},
             "hashtags": {t: {"c": h["videoCount"], "p": h["totalPlays"]}
                          for t, h in (agg["hashtags"] if agg else {}).items()},
-            "tags": custom_tag_stats.get(name) or {},
         }
+        if spec.get("trackTags"):
+            snapshot_niches[name]["tags"] = tag_stats.get(name) or {}
+
+    POOL_FILE.write_text(json.dumps(pool, separators=(",", ":")))
 
     latest = {
         "generatedAt": now.isoformat(),
