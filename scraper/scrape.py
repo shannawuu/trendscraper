@@ -487,6 +487,124 @@ def build_tracked_tags(stats, history, niche, today):
 
 
 # --------------------------------------------------------------------------
+# The user's own videos ("My Videos" analysis)
+# --------------------------------------------------------------------------
+# Each video's public stats are read from its own page's SSR blob
+# (__UNIVERSAL_DATA__ → webapp.video-detail), which works for any public
+# video without needing a special session. Optional private analytics (watch
+# time, retention, traffic) come only from the user's separate creator
+# account and are never mixed with the trend-scraping session.
+
+VIDEO_URL_RE = re.compile(r"/video/(\d+)")
+
+
+def load_my_videos():
+    """Read my_videos.json → (handle, [{"url","private"}]). Accepts plain URL
+    strings or objects; ignores anything without a /video/<id> URL."""
+    path = ROOT / "my_videos.json"
+    if not path.exists():
+        return None, []
+    try:
+        cfg = json.loads(path.read_text())
+    except Exception as e:
+        log(f"WARNING: could not parse my_videos.json: {e}")
+        return None, []
+    entries = []
+    for raw in cfg.get("videos") or []:
+        if isinstance(raw, str):
+            url, private = raw, None
+        elif isinstance(raw, dict):
+            url, private = raw.get("url"), raw.get("private")
+        else:
+            continue
+        if url and VIDEO_URL_RE.search(url):
+            entries.append({"url": url.split("?")[0], "private": private})
+    return cfg.get("handle"), entries
+
+
+async def _read_video_detail(page, url):
+    """Load a single video page and pull its stats from the SSR blob."""
+    await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    await page.wait_for_timeout(2500)
+    return await page.evaluate(
+        """() => {
+          try {
+            const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+            const d = JSON.parse(el.textContent);
+            const detail = d['__DEFAULT_SCOPE__']['webapp.video-detail'];
+            if (!detail) return {error: 'no detail'};
+            const it = (detail.itemInfo || {}).itemStruct;
+            if (!it) return {error: 'status ' + detail.statusCode};
+            const s = it.stats || {};
+            return {
+              id: it.id,
+              desc: it.desc || '',
+              createTime: Number(it.createTime) || 0,
+              duration: (it.video || {}).duration || 0,
+              author: (it.author || {}).uniqueId || '',
+              authorFollowers: (it.authorStats || {}).followerCount || 0,
+              views: Number(s.playCount) || 0,
+              likes: Number(s.diggCount) || 0,
+              comments: Number(s.commentCount) || 0,
+              shares: Number(s.shareCount) || 0,
+              saves: Number(s.collectCount) || 0,
+              hashtags: (it.challenges || []).map(c => (c.title || '').toLowerCase()).filter(Boolean),
+              sound: {id: (it.music || {}).id || '', title: (it.music || {}).title || '',
+                      original: !!(it.music || {}).original},
+            };
+          } catch (e) { return {error: String(e)}; }
+        }"""
+    )
+
+
+async def fetch_user_videos(entries, max_videos=80):
+    """Fetch public stats for each of the user's video URLs. Uses the trend
+    session (public data needs no special login). Returns a list of records
+    with an `error` field set when a video is private/deleted/unreadable."""
+    out = []
+    if not entries:
+        return out
+    entries = entries[:max_videos]
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        ctx = await new_context(browser)
+        page = await ctx.new_page()
+        for e in entries:
+            url = e["url"]
+            rec = {"url": url, "private": e.get("private"), "error": None}
+            try:
+                data = await _read_video_detail(page, url)
+                if data.get("error"):
+                    rec["error"] = data["error"]
+                else:
+                    rec.update(data)
+            except Exception as ex:
+                rec["error"] = str(ex)[:80]
+            if rec["error"]:
+                log(f"  my video {url}: {rec['error']}")
+            else:
+                log(f"  my video {rec.get('author')}/{rec['id']}: "
+                    f"{rec['views']:,} views, {rec['likes']:,} likes")
+            out.append(rec)
+        await browser.close()
+    return out
+
+
+def attach_growth(videos, prev_creator):
+    """Append today's view count to each video's growth series, carried from
+    the previous data/creator.json."""
+    prev = {}
+    for v in (prev_creator or {}).get("videos") or []:
+        prev[v.get("id")] = v.get("growth") or []
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for v in videos:
+        series = [pt for pt in prev.get(v.get("id"), []) if pt.get("date") != today]
+        series.append({"date": today, "v": v["views"]})
+        v["growth"] = series[-30:]
+    return videos
+
+
+# --------------------------------------------------------------------------
 # Creative Center official hashtags
 # --------------------------------------------------------------------------
 
@@ -821,12 +939,35 @@ async def main():
 
     POOL_FILE.write_text(json.dumps(pool, separators=(",", ":")))
 
+    # 4. the user's own videos: fetch public stats, track growth, analyze
+    import analyze as analyze_mod
+    handle, my_entries = load_my_videos()
+    creator_out = None
+    if my_entries:
+        log(f"fetching {len(my_entries)} of your own videos for analysis")
+        raw = await fetch_user_videos(my_entries)
+        try:
+            prev = json.loads((DATA_DIR / "creator.json").read_text())
+        except Exception:
+            prev = None
+        raw = attach_growth(raw, prev)
+        analysis = analyze_mod.analyze(raw, tz, niches_out)
+        creator_out = {
+            "generatedAt": now.isoformat(),
+            "handle": handle,
+            **analysis,
+        }
+        (DATA_DIR / "creator.json").write_text(json.dumps(creator_out, separators=(",", ":")))
+        log(f"wrote data/creator.json — {analysis['count']} videos, "
+            f"{len(analysis['factors'])} factors, {len(analysis['recommendations'])} recommendations")
+
     latest = {
         "generatedAt": now.isoformat(),
         "date": today,
         "region": cfg.get("region", "US"),
         "timezone": cfg.get("timezone", "UTC"),
         "sessionMode": "logged-in" if logged_in else "logged-out",
+        "hasCreator": bool(creator_out),
         "niches": niches_out,
         "official": official,
         "snapshotCount": len(history) + (0 if any(h.get("date") == today for h in history) else 1),

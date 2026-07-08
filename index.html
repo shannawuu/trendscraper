@@ -29,6 +29,55 @@
     </section>
 
     <div id="dashboard" class="hidden">
+      <!-- ============ My Videos (creator analytics) ============ -->
+      <section id="creator-view" class="hidden">
+        <section class="card" id="creator-input-card">
+          <div class="card-head">
+            <h2>&#128202; My Videos</h2>
+            <span class="muted small" id="creator-note"></span>
+          </div>
+          <p class="muted small">Paste your TikTok video URLs (one per line). They're saved to your
+          repo and their stats are re-fetched on every scrape, so growth and insights build up over time.</p>
+          <textarea id="creator-urls" class="creator-textarea" spellcheck="false"
+            placeholder="https://www.tiktok.com/@you/video/123...&#10;https://www.tiktok.com/@you/video/456..."></textarea>
+          <div class="modal-actions" style="justify-content:flex-start">
+            <button id="creator-save" class="btn-primary">Save &amp; analyze</button>
+            <span id="creator-save-status" class="muted small"></span>
+          </div>
+        </section>
+
+        <section class="card hidden" id="creator-summary-card">
+          <div class="card-head"><h2>&#128200; Overview</h2><span class="muted small" id="creator-summary-note"></span></div>
+          <div id="creator-summary" class="stat-chips"></div>
+        </section>
+
+        <div class="two-col">
+          <section class="card hidden" id="creator-recs-card">
+            <div class="card-head"><h2>&#128161; What to do</h2></div>
+            <ul id="creator-recs" class="rec-list"></ul>
+          </section>
+          <section class="card hidden" id="creator-factors-card">
+            <div class="card-head"><h2>&#128269; What correlates with your best videos</h2></div>
+            <ul id="creator-factors" class="rec-list"></ul>
+          </section>
+        </div>
+
+        <section class="card hidden" id="creator-videos-card">
+          <div class="card-head"><h2>&#127909; Your videos</h2><span class="muted small">ranked by views</span></div>
+          <div class="table-wrap">
+            <table id="creator-table">
+              <thead>
+                <tr><th>#</th><th>Video</th><th>Posted</th><th>Views</th><th>Eng.</th>
+                <th>Saves</th><th>Shares</th><th>Len</th><th>Sound</th><th>Growth</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ============ Niche trend dashboard ============ -->
+      <div id="niche-view">
       <section class="card hidden" id="tracked-card">
         <div class="card-head">
           <h2>&#128204; Product hashtags</h2>
@@ -89,14 +138,15 @@
           <ul id="videos-list" class="video-list"></ul>
         </section>
       </div>
+      </div><!-- /#niche-view -->
     </div>
   </main>
 
   <div id="settings-modal" class="modal hidden">
     <div class="modal-box">
       <h2>Settings</h2>
-      <p class="muted small">The "Update now" button triggers the GitHub Action that re-scrapes TikTok.
-      It needs a GitHub token with <b>Actions: Read &amp; write</b> permission on this repo.
+      <p class="muted small">"Update now" and "Save &amp; analyze" use a GitHub token with
+      <b>Actions: Read &amp; write</b> and <b>Contents: Read &amp; write</b> on this repo.
       The token is stored only in your browser.</p>
       <label>GitHub repo (owner/name)</label>
       <input id="cfg-repo" placeholder="e.g. cadenleung/tiktok-trends">

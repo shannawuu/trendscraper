@@ -153,4 +153,45 @@ tr:hover td { background: var(--card-2); }
   width: 100%; background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem;
 }
-.modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
+.modal-actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; align-items: center; }
+
+/* ---- My Videos (creator analytics) ---- */
+.creator-textarea {
+  width: 100%; min-height: 90px; resize: vertical;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; font-size: .85rem; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tab-special { border-color: var(--pink) !important; color: var(--pink) !important; }
+.tab-special.active { background: var(--pink) !important; color: #fff !important; border-color: var(--pink) !important; }
+
+.stat-chips { display: flex; flex-wrap: wrap; gap: 12px; }
+.stat-chip {
+  background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; min-width: 120px;
+}
+.stat-chip .v { font-size: 1.3rem; font-weight: 700; }
+.stat-chip .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.rec-list { list-style: none; }
+.rec-list li {
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; line-height: 1.45;
+}
+.rec-list li:last-child { border-bottom: none; }
+.rec-list .pill {
+  flex: 0 0 auto; font-size: .66rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: .03em; margin-top: 1px;
+}
+.pill.high { background: rgba(254,44,85,.16); color: var(--pink); }
+.pill.medium { background: rgba(251,191,36,.14); color: var(--amber); }
+.pill.good { background: rgba(74,222,128,.15); color: var(--green); }
+.rec-area { font-weight: 700; }
+
+#creator-table td { vertical-align: middle; }
+.tag-chip {
+  display: inline-block; font-size: .72rem; padding: 1px 6px; border-radius: 6px;
+  background: var(--card-2); color: var(--muted); margin: 1px 2px 1px 0;
+}
+.tag-chip.hot { background: rgba(74,222,128,.15); color: var(--green); }
+.mini-eng { font-size: .72rem; color: var(--muted); }

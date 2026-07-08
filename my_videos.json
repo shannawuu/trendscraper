@@ -1,0 +1,21 @@
+{
+  "handle": "your_handle_here",
+  "note": "Replace the videos below with YOUR TikTok video URLs (paste them in the dashboard's My Videos panel, or edit this file). Each entry can be a plain URL string, or an object with optional private analytics from TikTok Studio: {\"url\": \"...\", \"private\": {\"avgWatchTimeSec\": 0, \"watchedFullPct\": 0, \"newFollowers\": 0, \"traffic\": {\"fyp\": 0, \"profile\": 0, \"search\": 0, \"following\": 0, \"sound\": 0}}}. The seed list below is real study/AI-niche videos used as a working demo until you add your own.",
+  "videos": [
+    "https://www.tiktok.com/@mrbeandamatematica/video/7655893741034540306",
+    "https://www.tiktok.com/@francis.lockedin/video/7656142144578653460",
+    "https://www.tiktok.com/@matematicafacil321/video/7651384577000262933",
+    "https://www.tiktok.com/@idkexplained/video/7654424517443439880",
+    "https://www.tiktok.com/@lingualin/video/7651941946977553680",
+    "https://www.tiktok.com/@otai_studyy/video/7642669446884068615",
+    "https://www.tiktok.com/@mayaavidoryaakobi/video/7563337213665217813",
+    "https://www.tiktok.com/@rishabinclass/video/7563931886410681631",
+    "https://www.tiktok.com/@studylabz/video/7573397591879208214",
+    "https://www.tiktok.com/@simplify_ai/video/7626430135318695190",
+    "https://www.tiktok.com/@mileni.chats/video/7645614815536352525",
+    "https://www.tiktok.com/@kizzappwis/video/7505436350976429358",
+    "https://www.tiktok.com/@sproutful.app/video/7629409854964141325",
+    "https://www.tiktok.com/@digital_bard/video/7369485336994467114",
+    "https://www.tiktok.com/@jonnyslife_/video/7639542021266361613"
+  ]
+}

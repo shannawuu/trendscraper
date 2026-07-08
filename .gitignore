@@ -8,5 +8,7 @@ cookies.json
 cookies.txt
 scraper/cookies.json
 scraper/cookies.txt
+creator_cookies.json
+scraper/creator_cookies.json
 *.cookies
 secrets.json

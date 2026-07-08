@@ -10,6 +10,33 @@ demand with the **Update now** button), and shows:
   official Creative Center list (with popularity curves)
 - **Estimated best posting hours** per niche (engagement-weighted, heuristic)
 - **Niche switching** — pick any of TikTok's 21 explore categories in `config.json`
+- **My Videos** — analyze your own posts: paste your video URLs and get
+  per-video stats, growth tracking, what correlates with your best videos, and
+  concrete recommendations (posting time, length, sounds, hashtags)
+
+## My Videos (analyze your own content)
+
+Open the **📊 My Videos** tab, paste your TikTok video URLs (one per line),
+and hit **Save & analyze**. Each run re-fetches every video's public stats
+(views, likes, comments, shares, saves, post time, duration, hashtags, sound)
+straight from its page — no account login required — and:
+
+- tracks each video's view growth over time,
+- compares your top vs bottom performers to surface what correlates with
+  success (length, hashtag count, trending-sound use, trending-hashtag use),
+- cross-references your videos against the live trend data (flags which of
+  your sounds/hashtags are currently trending),
+- gives prioritized recommendations grounded in *your* numbers.
+
+The URL list lives in `my_videos.json` (the dashboard writes it for you via
+the GitHub API; you can also edit it directly). Analysis is correlational —
+with fewer than ~6 videos it's directional; it sharpens as you add more.
+
+Optional: add private TikTok Studio metrics per video by making an entry an
+object, e.g. `{"url": "...", "private": {"avgWatchTimeSec": 12, "watchedFullPct": 40}}`.
+Auto-pulling those from your creator account (a separate, isolated login from
+the trend-scraping account) is possible but off by default — it would put your
+main account into automation; ask if you want to enable it.
 
 ## Setup (one time, ~5 minutes)
 
@@ -23,11 +50,12 @@ demand with the **Update now** button), and shows:
    Your dashboard will be at `https://<you>.github.io/<repo>/`.
 3. **Allow the workflow to push data**: repo → Settings → Actions → General →
    Workflow permissions → select **Read and write permissions** → Save.
-4. **Make the "Update now" button work**: create a fine-grained token at
-   github.com/settings/personal-access-tokens → New token → Repository access:
-   *only this repo* → Permissions → **Actions: Read and write** → Generate.
-   Open the dashboard, click ⚙, paste the repo (`you/repo`) and token.
-   The token never leaves your browser (stored in `localStorage`).
+4. **Make the "Update now" and "Save & analyze" buttons work**: create a
+   fine-grained token at github.com/settings/personal-access-tokens → New token
+   → Repository access: *only this repo* → Permissions → **Actions: Read and
+   write** and **Contents: Read and write** → Generate. Open the dashboard,
+   click ⚙, paste the repo (`you/repo`) and token. The token never leaves your
+   browser (stored in `localStorage`).
 
 The scraper then runs automatically every day at 10:30 UTC and whenever you
 click **Update now** (or press *Run workflow* in the Actions tab).

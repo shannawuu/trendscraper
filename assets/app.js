@@ -1,8 +1,11 @@
 /* TikTok Trend Radar dashboard */
 
 let DATA = null;
+let CREATOR = null;
 let currentNiche = null;
+let currentView = null; // "creator" or a niche name
 let officialPeriod = "7d";
+const CREATOR_TAB = "📊 My Videos";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -110,11 +113,18 @@ function trackedTrajectory(history) {
 function renderTabs() {
   const tabs = $("#niche-tabs");
   tabs.innerHTML = "";
+  // special "My Videos" tab first (always available — public stats need no login)
+  const cb = document.createElement("button");
+  cb.textContent = CREATOR_TAB;
+  cb.className = "tab-special" + (currentView === "creator" ? " active" : "");
+  cb.onclick = () => { currentView = "creator"; render(); };
+  tabs.appendChild(cb);
+
   Object.keys(DATA.niches).forEach((label) => {
     const b = document.createElement("button");
     b.textContent = label;
-    b.className = label === currentNiche ? "active" : "";
-    b.onclick = () => { currentNiche = label; render(); };
+    b.className = currentView === label ? "active" : "";
+    b.onclick = () => { currentView = label; currentNiche = label; render(); };
     tabs.appendChild(b);
   });
 }
@@ -251,6 +261,11 @@ function renderVideos(niche) {
 
 function render() {
   renderTabs();
+  const creatorMode = currentView === "creator";
+  $("#creator-view").classList.toggle("hidden", !creatorMode);
+  $("#niche-view").classList.toggle("hidden", creatorMode);
+  if (creatorMode) { renderCreator(); return; }
+
   const niche = DATA.niches[currentNiche];
   if (!niche) return;
   renderTracked(niche);
@@ -259,6 +274,110 @@ function render() {
   renderOfficial();
   renderHours(niche);
   renderVideos(niche);
+}
+
+// ---------------------------------------------------------------------------
+// My Videos (creator analytics)
+// ---------------------------------------------------------------------------
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function renderCreator() {
+  // prefill the URL box from whatever was last analyzed
+  const box = $("#creator-urls");
+  if (CREATOR && !box.dataset.dirty) {
+    const urls = (CREATOR.videos || []).map((v) => v.url)
+      .concat((CREATOR.errored || []).map((e) => e.url));
+    if (urls.length && !box.value.trim()) box.value = urls.join("\n");
+  }
+
+  const hasData = CREATOR && (CREATOR.videos || []).length;
+  $("#creator-note").textContent = CREATOR ? (CREATOR.note || "") : "No analysis yet — add videos and save.";
+
+  ["creator-summary-card", "creator-recs-card", "creator-factors-card", "creator-videos-card"]
+    .forEach((id) => $("#" + id).classList.toggle("hidden", !hasData));
+  if (!hasData) return;
+
+  renderCreatorSummary();
+  renderCreatorRecs();
+  renderCreatorFactors();
+  renderCreatorTable();
+}
+
+function renderCreatorSummary() {
+  const s = CREATOR.summary || {};
+  const chips = [
+    ["Videos", CREATOR.count],
+    ["Median views", fmt(s.medianViews)],
+    ["Total views", fmt(s.totalViews)],
+    ["Median engagement", ((s.medianEngagementRate || 0) * 100).toFixed(1) + "%"],
+    ["Median length", s.medianDuration != null ? s.medianDuration + "s" : "–"],
+    ["Trending-sound use", Math.round((s.trendingSoundShare || 0) * 100) + "%"],
+  ];
+  $("#creator-summary").innerHTML = chips.map(
+    ([k, v]) => `<div class="stat-chip"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`
+  ).join("");
+  $("#creator-summary-note").textContent = CREATOR.handle && CREATOR.handle !== "your_handle_here"
+    ? "@" + CREATOR.handle : "";
+}
+
+function renderCreatorRecs() {
+  const recs = CREATOR.recommendations || [];
+  const card = $("#creator-recs-card");
+  if (!recs.length) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  $("#creator-recs").innerHTML = recs.map((r) => `
+    <li><span class="pill ${r.priority === "high" ? "high" : "medium"}">${esc(r.priority)}</span>
+      <span><span class="rec-area">${esc(r.area)}.</span> ${esc(r.text)}</span></li>`).join("");
+}
+
+function renderCreatorFactors() {
+  const factors = CREATOR.factors || [];
+  const card = $("#creator-factors-card");
+  if (!factors.length) {
+    card.classList.remove("hidden");
+    $("#creator-factors").innerHTML =
+      `<li><span class="muted">${esc(CREATOR.note || "Add more videos to reveal patterns.")}</span></li>`;
+    return;
+  }
+  card.classList.remove("hidden");
+  $("#creator-factors").innerHTML = factors.map((f) => `
+    <li><span class="pill good">${f.direction === "higher" ? "▲" : "▼"}</span>
+      <span>${esc(f.insight)}</span></li>`).join("");
+}
+
+function creatorTagChips(v) {
+  const hot = new Set([...(v.trendingTagsUsed || []), ...(v.risingTagsUsed || [])]);
+  return (v.hashtags || []).slice(0, 6).map(
+    (t) => `<span class="tag-chip ${hot.has(t) ? "hot" : ""}">#${esc(t)}</span>`
+  ).join("");
+}
+
+function renderCreatorTable() {
+  const tbody = $("#creator-table tbody");
+  tbody.innerHTML = "";
+  (CREATOR.videos || []).forEach((v, i) => {
+    const growth = (v.growth || []).map((p) => ({ p: p.v }));
+    const eng = (v.engagementRate * 100).toFixed(1) + "%";
+    const soundBadge = v.usedTrendingSound ? ' <span class="tag-chip hot">trending</span>' : "";
+    const soundName = esc((v.sound && v.sound.title) || (v.sound && v.sound.original ? "original" : "–"));
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="muted">${i + 1}</td>
+      <td>
+        <div class="sound-title"><a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.desc ? v.desc.slice(0, 60) : "(no caption)")}</a></div>
+        <div>${creatorTagChips(v)}</div>
+      </td>
+      <td class="mini-eng">${esc(v.postLabel || "–")}</td>
+      <td>${fmt(v.views)}</td>
+      <td>${eng}</td>
+      <td>${fmt(v.saves)}</td>
+      <td>${fmt(v.shares)}</td>
+      <td>${v.duration ? v.duration + "s" : "–"}</td>
+      <td class="mini-eng">${soundName}${soundBadge}</td>
+      <td>${sparkline(growth, 90, 24)}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +473,59 @@ async function pollForCompletion(repo, token) {
   $("#update-btn").disabled = false;
 }
 
+// Save the pasted URLs to my_videos.json in the repo, then trigger a scrape.
+function b64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+async function saveMyVideos() {
+  const repo = detectRepo();
+  const token = localStorage.getItem("gh_token");
+  if (!repo || !token) { openSettings(); return; }
+
+  const urls = $("#creator-urls").value.split(/\s+/)
+    .map((s) => s.trim())
+    .filter((s) => /\/video\/\d+/.test(s));
+  const status = $("#creator-save-status");
+  if (!urls.length) { status.textContent = "Paste at least one video URL first."; return; }
+
+  const btn = $("#creator-save");
+  btn.disabled = true;
+  status.textContent = "Saving to your repo…";
+  const content = {
+    handle: (CREATOR && CREATOR.handle) || "your_handle_here",
+    videos: urls,
+  };
+
+  try {
+    // fetch existing SHA (required to update an existing file)
+    let sha;
+    const getRes = await gh(`/repos/${repo}/contents/my_videos.json`, token);
+    if (getRes.status === 200) sha = (await getRes.json()).sha;
+
+    const putRes = await gh(`/repos/${repo}/contents/my_videos.json`, token, {
+      method: "PUT",
+      body: JSON.stringify({
+        message: "Update my_videos.json from dashboard",
+        content: b64(JSON.stringify(content, null, 2) + "\n"),
+        sha,
+      }),
+    });
+    if (putRes.status === 401 || putRes.status === 403)
+      throw new Error("Token needs Contents: Read & write on this repo.");
+    if (putRes.status !== 200 && putRes.status !== 201)
+      throw new Error(`Save failed (GitHub ${putRes.status}).`);
+
+    status.textContent = `Saved ${urls.length} videos. Starting analysis scrape…`;
+    // reuse the workflow trigger + poll so the page reloads when done
+    await triggerUpdate();
+  } catch (e) {
+    status.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Settings modal
 // ---------------------------------------------------------------------------
@@ -386,6 +558,8 @@ function initSettings() {
 async function init() {
   initSettings();
   $("#update-btn").onclick = triggerUpdate;
+  $("#creator-save").onclick = saveMyVideos;
+  $("#creator-urls").addEventListener("input", (e) => { e.target.dataset.dirty = "1"; });
   $("#official-period").addEventListener("click", (e) => {
     const p = e.target.dataset.p;
     if (!p) return;
@@ -404,7 +578,14 @@ async function init() {
     return;
   }
 
+  try {
+    const cres = await fetch(`data/creator.json?t=${Date.now()}`);
+    if (cres.ok) CREATOR = await cres.json();
+  } catch { /* no creator data yet */ }
+
   currentNiche = Object.keys(DATA.niches)[0];
+  // land on My Videos when there's creator data, else the first niche
+  currentView = CREATOR && (CREATOR.videos || []).length ? "creator" : currentNiche;
   const mode = DATA.sessionMode === "logged-in"
     ? " · 🔓 logged-in (full hashtag data)"
     : DATA.sessionMode === "logged-out"
